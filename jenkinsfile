@@ -1,0 +1,30 @@
+pipeline {
+    agent any
+
+    stages {
+
+        stage('Git Checkout') {
+            steps {
+                git 'https://github.com/ananpabbas/django-ci-cd-project.git'
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                echo 'Running SonarQube Scan'
+            }
+        }
+
+        stage('Docker Build') {
+            steps {
+                sh 'docker --version'
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                echo 'Deployment Stage'
+            }
+        }
+    }
+}
