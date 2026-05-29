@@ -5,6 +5,7 @@ pipeline {
         IMAGE_NAME = "django-app"
         STAGING_CONTAINER = "django-staging"
         PROD_CONTAINER = "django-prod"
+        WORKSPACE_DIR = "${env.WORKSPACE}"
     }
 
     stages {
@@ -15,9 +16,10 @@ pipeline {
             }
         }
 
-        stage('Create Virtual Environment') {
+        stage('Setup Environment') {
             steps {
                 sh '''
+                cd $WORKSPACE_DIR
                 python3 -m venv venv
                 '''
             }
@@ -26,6 +28,8 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 sh '''
+                cd $WORKSPACE_DIR
+                export PYTHONPATH=$WORKSPACE_DIR
                 . venv/bin/activate
                 pip install --upgrade pip
                 pip install -r requirements.txt
@@ -36,6 +40,8 @@ pipeline {
         stage('Run Tests') {
             steps {
                 sh '''
+                cd $WORKSPACE_DIR
+                export PYTHONPATH=$WORKSPACE_DIR
                 . venv/bin/activate
                 python manage.py test
                 '''
@@ -45,6 +51,7 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 sh '''
+                cd $WORKSPACE_DIR
                 docker build -t $IMAGE_NAME .
                 '''
             }
@@ -79,11 +86,11 @@ pipeline {
 
     post {
         success {
-            echo "Pipeline executed successfully 🎉"
+            echo "✅ Pipeline SUCCESS"
         }
 
         failure {
-            echo "Pipeline failed ❌ Check logs"
+            echo "❌ Pipeline FAILED - check logs"
         }
     }
 }
