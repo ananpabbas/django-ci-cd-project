@@ -2,25 +2,25 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = "django-app"
-        STAGING_CONTAINER = "django-staging"
-        PROD_CONTAINER = "django-prod"
-        WORKSPACE_DIR = "${env.WORKSPACE}"
+        SONAR_HOST_URL = 'http://32.236.85.107:9000'
+        PROJECT_DIR = 'test_django_pro'
+        IMAGE_NAME = 'django-app'
     }
 
     stages {
 
-        stage('Checkout Code') {
+        stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/ananpabbas/django-ci-cd-project.git'
+                checkout scm
             }
         }
 
         stage('Setup Environment') {
             steps {
                 sh '''
-                cd $WORKSPACE_DIR
-                python3 -m venv venv
+                    python3 -m venv venv
+                    . venv/bin/activate
+                    pip install --upgrade pip
                 '''
             }
         }
@@ -28,11 +28,9 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 sh '''
-                cd $WORKSPACE_DIR
-                export PYTHONPATH=$WORKSPACE_DIR
-                . venv/bin/activate
-                pip install --upgrade pip
-                pip install -r requirements.txt
+                    . venv/bin/activate
+                    pip install -r ${PROJECT_DIR}/requirements.txt
+                    pip install pytest pytest-django pytest-cov
                 '''
             }
         }
@@ -40,10 +38,34 @@ pipeline {
         stage('Run Tests') {
             steps {
                 sh '''
-                cd $WORKSPACE_DIR
-                export PYTHONPATH=$WORKSPACE_DIR
-                . venv/bin/activate
-                python manage.py test
+                    . venv/bin/activate
+                    export PYTHONPATH=$WORKSPACE
+
+                    cd ${PROJECT_DIR}
+
+                    python manage.py makemigrations --check --dry-run
+                    python manage.py migrate
+
+                    pytest \
+                      --ds=test_django_pro.settings \
+                      --junitxml=report.xml \
+                      --cov=. \
+                      --cov-report=xml || true
+                '''
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                sh '''
+                    docker run --rm \
+                      -e SONAR_HOST_URL=$SONAR_HOST_URL \
+                      -v $WORKSPACE:/usr/src \
+                      sonarsource/sonar-scanner-cli \
+                      -Dsonar.projectKey=django-app \
+                      -Dsonar.sources=/usr/src \
+                      -Dsonar.host.url=$SONAR_HOST_URL \
+                      -Dsonar.login=$SONAR_TOKEN
                 '''
             }
         }
@@ -51,8 +73,7 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 sh '''
-                cd $WORKSPACE_DIR
-                docker build -t $IMAGE_NAME .
+                    docker build -t $IMAGE_NAME ${PROJECT_DIR}
                 '''
             }
         }
@@ -60,25 +81,25 @@ pipeline {
         stage('Deploy to Staging') {
             steps {
                 sh '''
-                docker stop $STAGING_CONTAINER || true
-                docker rm $STAGING_CONTAINER || true
-                docker run -d -p 8001:8000 --name $STAGING_CONTAINER $IMAGE_NAME
+                    docker stop django-staging || true
+                    docker rm django-staging || true
+                    docker run -d -p 8001:8000 --name django-staging $IMAGE_NAME
                 '''
             }
         }
 
         stage('Approval for Production') {
             steps {
-                input message: "Deploy to Production?"
+                input message: 'Deploy to Production?'
             }
         }
 
         stage('Deploy to Production') {
             steps {
                 sh '''
-                docker stop $PROD_CONTAINER || true
-                docker rm $PROD_CONTAINER || true
-                docker run -d -p 8000:8000 --name $PROD_CONTAINER $IMAGE_NAME
+                    docker stop django-prod || true
+                    docker rm django-prod || true
+                    docker run -d -p 8000:8000 --name django-prod $IMAGE_NAME
                 '''
             }
         }
@@ -86,11 +107,15 @@ pipeline {
 
     post {
         success {
-            echo "✅ Pipeline SUCCESS"
+            echo "Pipeline SUCCESS ✔"
         }
 
         failure {
-            echo "❌ Pipeline FAILED - check logs"
+            echo "Pipeline FAILED ❌"
+        }
+
+        always {
+            cleanWs()
         }
     }
 }
