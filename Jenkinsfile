@@ -4,7 +4,7 @@ pipeline {
     stages {
         stage('GitHub Checkout') {
             steps {
-                git 'https://github.com/ananpabbas/django-ci-cd-project.git'
+                git branch: 'main', url: 'https://github.com/ananpabbas/django-ci-cd-project.git'
             }
         }
 
